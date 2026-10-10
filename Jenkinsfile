@@ -100,8 +100,10 @@ pipeline {
 
         stage('Docker login') {
             steps {
-                // Mat khau khong in ra console — pipe truc tiep vao docker login
-                powershell 'Write-Output $env:DOCKERHUB_PSW | docker login -u $env:DOCKERHUB_USR --password-stdin'
+                // Mat khau khong in ra console — pipe truc tiep vao docker login.
+                // Dung bash printf "%s" (Git for Windows): PowerShell 5.1 pipe them CRLF,
+                // docker chi trim "\n" con lai "\r" → password sai → login that bai.
+                powershell '''& 'C:\Program Files\Git\bin\bash.exe' -c 'printf "%s" "$DOCKERHUB_PSW" | docker login -u "$DOCKERHUB_USR" --password-stdin' '''
             }
         }
 
