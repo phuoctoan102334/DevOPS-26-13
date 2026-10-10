@@ -56,5 +56,5 @@ Quản lý sinh viên (LAB 03), đã tách 3 phần rõ ràng: backend (Spring B
 - Mật khẩu SA mặc định trong compose: `SA_Passw0rd1` (đổi qua biến môi trường MSSQL_SA_PASSWORD trước khi up; backend tự nhận qua env SPRING_DATASOURCE_*)
 - application.properties chứa tài khoản/mật khẩu DB — không in log/commit giá trị thật
 - Đổi schema database, xóa file/table = mức Cao, cần xác nhận Y/N
-- Git: repo báo "dubious ownership" với lệnh git thường — chỉ chạy được với `git -c safe.directory=D:/Devops/DevOPS-26-13 ...` (KHÔNG ghi safe.directory vào config global nếu chưa được yêu cầu). Nhánh hiện tại: `thinh-upp`; file chưa track: .github/, cautruc.md, luat.md, nhatky.md
+- Git: repo báo "dubious ownership" với lệnh git thường — chỉ chạy được với `git -c safe.directory=D:/Devops/DevOPS-26-13 ...` (KHÔNG ghi safe.directory vào config global nếu chưa được yêu cầu). Nhánh `thinh-upp` đã push commit bbb96a3 (Jenkins CI/CD) lên origin; remote cũ `Student-Management-System.git` đã chuyển sang `https://github.com/phuoctoan102334/DevOPS-26-13.git` (redirect vẫn chạy). File chưa track: .github/, luat.md; thay đổi riêng của user trong image_thinh/ (xóa ảnh cũ, thêm ubuntu/) chưa commit
 - Trạng thái runtime (lần ghi nhận gần nhất 2026-09-26): container Docker đã dừng tất cả — chạy lại bằng `docker compose up -d`
