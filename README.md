@@ -86,6 +86,53 @@ Body mẫu:
 
 ---
 
+## Mục 2 — Docker hóa dự án từ điển `giuaky` (tra từ Anh–Việt)
+
+Dự án `giuaky` (React 18 + Vite + Express + Postgres 16) ban đầu thiếu `Dockerfile`
+và `docker-compose.yml`. Đã bổ sung đầy đủ để build 1 lần, chạy mọi nơi:
+
+### 2.1. `Dockerfile` (multi-stage)
+
+- **Stage 1 — build frontend:** `node:20-alpine`, `npm ci`, `npm run build` → ra `dist/`.
+  Copy `package*.json` trước để tận dụng Docker layer cache.
+- **Stage 2 — production:** chỉ cài dependencies backend (`npm ci --omit=dev`),
+  copy `dist/` từ stage 1 vào `public/` (Express serve từ đây), chạy `node server.js`.
+- Kết quả: image cuối nhẹ, không chứa tool build (vite, eslint...).
+
+### 2.2. `docker-compose.yml` (2 services + named volume)
+
+| Service | Image | Cổng host | Cổng container |
+|---|---|---|---|
+| `web` | `phuoctoannyx/giuaky:latest` | `8080` (`WEB_PORT`) | `3000` |
+| `db` | `phuoctoannyx/giuaky-db:latest` | `55432` (`DB_PORT`) | `5432` |
+
+- `DB_HOST: db` — backend gọi DB bằng tên service (DNS nội bộ Docker), không phải `localhost`.
+- `DB_PORT: 5432` trong `web` là cổng **nội bộ**; `55432` chỉ là cổng map ra máy host
+  (dùng cho DBeaver/pgAdmin).
+- Volume `pgdata:/var/lib/postgresql/data` giữ dữ liệu Postgres khi `down`/`up`;
+  `down -v` mới xóa sạch và chạy lại `init.sql` (seed 10 từ).
+- `depends_on: db` chỉ đảm bảo thứ tự khởi động container.
+
+### 2.3. Docker Hub (image public, pull về chạy ngay)
+
+- Web: `phuoctoannyx/giuaky:latest` → https://hub.docker.com/r/phuoctoannyx/giuaky
+- DB (Postgres 16 + seed data): `phuoctoannyx/giuaky-db:latest`
+- `docker-compose.yml` đã chuyển sang dùng image có sẵn thay vì `build`,
+  nên người khác chỉ cần 2 file (`docker-compose.yml` + `.env`):
+
+```bash
+docker pull phuoctoannyx/giuaky:latest
+docker compose up        # không cần source code, không cần build
+```
+
+App chạy tại `http://localhost:8080`.
+
+### 2.4. Source code trên GitHub
+
+`git init` → commit → push: https://github.com/phuoctoan102334/giuaky
+
+---
+
 ## Phụ lục A — CI/CD dự án dictionary-app-5 bằng Jenkins (làm lại & chụp ảnh ngày 10/10/2026)
 
 Mục này ghi lại **toàn bộ quy trình CI/CD đã thực hiện thật** cho dự án `dictionary-app-5`
