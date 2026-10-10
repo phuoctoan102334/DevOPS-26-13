@@ -19,7 +19,6 @@ pipeline {
     agent any
 
     options {
-        timestamps()
         disableConcurrentBuilds(abortPrevious: true)
         timeout(time: 45, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '20'))
@@ -98,17 +97,21 @@ pipeline {
                         values 'backend', 'frontend', 'database'
                     }
                 }
-                steps {
-                    script {
-                        def branch    = (env.BRANCH_NAME ?: 'local').toLowerCase().replaceAll(/[^a-z0-9._-]/, '-')
-                        def sha       = (env.GIT_COMMIT ?: 'nogit').take(12)
-                        def base      = "${env.IMG_BASE}-${env.APP_IMAGE}".toLowerCase()
-                        def isDefault = ['main', 'master'].contains(branch)
-                        def extra     = isDefault ? "-t ${base}:latest" : ''
-                        powershell "docker build -t ${base}:${branch} -t ${base}:${sha} ${extra} ${env.APP_IMAGE}"
-                        powershell "docker push ${base}:${branch}"
-                        powershell "docker push ${base}:${sha}"
-                        if (isDefault) { powershell "docker push ${base}:latest" }
+                stages {
+                    stage('Build & Push image') {
+                        steps {
+                            script {
+                                def branch    = (env.BRANCH_NAME ?: 'local').toLowerCase().replaceAll(/[^a-z0-9._-]/, '-')
+                                def sha       = (env.GIT_COMMIT ?: 'nogit').take(12)
+                                def base      = "${env.IMG_BASE}-${env.APP_IMAGE}".toLowerCase()
+                                def isDefault = ['main', 'master'].contains(branch)
+                                def extra     = isDefault ? "-t ${base}:latest" : ''
+                                powershell "docker build -t ${base}:${branch} -t ${base}:${sha} ${extra} ${env.APP_IMAGE}"
+                                powershell "docker push ${base}:${branch}"
+                                powershell "docker push ${base}:${sha}"
+                                if (isDefault) { powershell "docker push ${base}:latest" }
+                            }
+                        }
                     }
                 }
             }
