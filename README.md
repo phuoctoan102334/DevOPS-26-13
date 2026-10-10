@@ -83,3 +83,40 @@ Body mẫu:
 ```json
 { "id": 4, "name": "Nguyễn Văn D", "age": 21, "email": "d@gmail.com" }
 ```
+
+---
+
+## CI/CD bằng Jenkins
+
+Pipeline nằm ở `Jenkinsfile` (root), chạy trên agent **Windows** (Docker Desktop đang chạy). luồng công việc:
+
+```
+Checkout (GitHub) → SQL Server container → mvn test (backend)
+→ docker login Docker Hub → build & push 3 image → deploy bằng docker-compose.deploy.yml
+```
+
+**Chuẩn bị trên Jenkins (1 lần):**
+
+1. Cài plugin: **Pipeline**, **Git**.
+2. Tạo credential **`dockerhub-cred`** (loại *Username with password*):
+   - Username: user Docker Hub
+   - Password: Personal Access Token (PAT) tạo tại https://hub.docker.com → Account Settings → Personal access tokens (quyền *Read & Write*)
+3. Tạo job **Multibranch Pipeline** trỏ vào repo GitHub này (Jenkinsfile ở root sẽ tự được đọc).
+4. Agent Windows cần: Docker Desktop đang chạy, `git` trong PATH; JDK mặc định pipeline dùng `C:\oracleJdk-27` (đổi biến `JDK_FALLBACK` trong `Jenkinsfile` nếu máy khác).
+
+**Kết quả mỗi lần build:**
+
+- Image push lên Docker Hub: `<user>/studentmanager-backend|frontend|database` với tag: tên nhánh, commit sha12, và `latest` (nhánh `main`/`master`).
+- Ở nhánh `main`/`master`: stage **Deploy tự động** — `docker compose -f docker-compose.deploy.yml pull && up -d` (chạy stack từ image vừa push, không build lại source).
+- Nhánh khác: chỉ test + build + push, không deploy.
+
+**Deploy tay bằng image từ registry** (không cần Jenkins):
+
+```powershell
+$env:IMAGE_NS = "<user-dockerhub>"
+$env:IMAGE_TAG = "latest"          # hoặc tên nhánh / sha12
+docker compose -f docker-compose.deploy.yml up -d
+```
+
+- `docker-compose.yml` (build từ source) và `docker-compose.deploy.yml` (pull image) dùng chung volume `sqldata` và các port 1433/8080/3000 — chỉ chạy 1 trong 2 tại một thời điểm.
+- Mật khẩu DB: đặt biến `MSSQL_SA_PASSWORD` (mặc định trong compose); credential Docker Hub chỉ nằm trong Jenkins, không commit vào repo.

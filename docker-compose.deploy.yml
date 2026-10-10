@@ -1,0 +1,51 @@
+# Deploy bản image ĐÃ push lên Docker Hub (dùng trong stage Deploy của Jenkinsfile)
+# Chạy tay (nếu cần):
+#   $env:IMAGE_NS = "<user-dockerhub>"; $env:IMAGE_TAG = "latest"
+#   docker compose -f docker-compose.deploy.yml up -d
+# Khác docker-compose.yml ở chỗ: không build từ source, mà pull image từ registry.
+
+services:
+  database:
+    image: ${IMAGE_NS:?Hay set bien IMAGE_NS (user Docker Hub)}/studentmanager-database:${IMAGE_TAG:-latest}
+    pull_policy: always
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "Developer"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:-SA_Passw0rd1}"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqldata:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "for p in /opt/mssql-tools18/bin/sqlcmd /opt/mssql-tools/bin/sqlcmd; do if [ -x $$p ]; then $$p -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' >/dev/null 2>&1 && exit 0; $$p -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' >/dev/null 2>&1 && exit 0; exit 1; fi; done; timeout 1 bash -c 'exec 3<>/dev/tcp/localhost/1433' && exit 0; exit 1"]
+      interval: 10s
+      timeout: 8s
+      retries: 12
+      start_period: 40s
+    restart: unless-stopped
+
+  backend:
+    image: ${IMAGE_NS:?Hay set bien IMAGE_NS (user Docker Hub)}/studentmanager-backend:${IMAGE_TAG:-latest}
+    pull_policy: always
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: "jdbc:sqlserver://database:1433;databaseName=school;trustServerCertificate=true"
+      SPRING_DATASOURCE_USERNAME: "sa"
+      SPRING_DATASOURCE_PASSWORD: "${MSSQL_SA_PASSWORD:-SA_Passw0rd1}"
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    image: ${IMAGE_NS:?Hay set bien IMAGE_NS (user Docker Hub)}/studentmanager-frontend:${IMAGE_TAG:-latest}
+    pull_policy: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  sqldata:
