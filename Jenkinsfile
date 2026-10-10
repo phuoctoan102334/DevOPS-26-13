@@ -114,13 +114,8 @@ pipeline {
             }
         }
 
-        // Deploy tu dong bang image vua push (chi nhanh main/master, hoac job 1 nhanh)
+        // Deploy tu dong moi nhanh (tag = ten nhanh; main/master dung tag latest)
         stage('Deploy') {
-            when {
-                expression {
-                    env.BRANCH_NAME == null || ['main', 'master'].contains(env.BRANCH_NAME.toLowerCase())
-                }
-            }
             steps {
                 powershell '''
                     # Tra lai port 1433 cho stack deploy (container CI dung chung port)

@@ -107,8 +107,7 @@ Checkout (GitHub) → SQL Server container → mvn test (backend)
 **Kết quả mỗi lần build:**
 
 - Image push lên Docker Hub: `<user>/studentmanager-backend|frontend|database` với tag: tên nhánh, commit sha12, và `latest` (nhánh `main`/`master`).
-- Ở nhánh `main`/`master`: stage **Deploy tự động** — `docker compose -f docker-compose.deploy.yml pull && up -d` (chạy stack từ image vừa push, không build lại source).
-- Nhánh khác: chỉ test + build + push, không deploy.
+- **Mọi nhánh** đều có stage **Deploy tự động** — image push tag tên nhánh (+ `latest` ở nhánh `main`/`master`), rồi `docker compose -f docker-compose.deploy.yml pull && up -d` (chạy stack từ image vừa push, không build lại source).
 
 **Deploy tay bằng image từ registry** (không cần Jenkins):
 
