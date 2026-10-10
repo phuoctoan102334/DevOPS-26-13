@@ -7,3 +7,4 @@
 [2026-09-26 10:27] TB | ci-ghcr.yml, cautruc.md | Them GitHub Actions: test + build/push image GHCR moi commit | OK
 [2026-10-10 07:24] Thấp | cautruc.md, nhatky.md | Nạp phiên theo luat.md: snapshot hết hạn 7 ngày, quét lại & cập nhật | OK
 [2026-10-10 07:35] TB | Jenkinsfile, docker-compose.deploy.yml, README.md | Them Jenkins CI/CD: test Maven + push Docker Hub + deploy | OK
+[2026-10-10 10:17] TB | Jenkinsfile | Fix ready-check SQL Server (doi log docker, bo TCP false-positive cua Docker Desktop proxy), kiem CI DB truoc test, post giu log truoc khi xoa | OK (backup .backup/Jenkinsfile/Jenkinsfile.bak.20261010_1015)

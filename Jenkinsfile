@@ -48,19 +48,28 @@ pipeline {
                         -e MSSQL_SA_PASSWORD=$env:DB_CI_PASS `
                         studentmanager-db:ci
 
-                    # Cho SQL Server mở port 1433 (toi da ~3 phut)
+                    # Cho SQL Server khoi dong that su (doi log "ready"), toi da ~5 phut.
+                    # NOTE: chi check TCP khong du — Docker Desktop proxy chap nhan ket noi
+                    # ngay khi container chua khoi dong xong (false positive).
                     $ok = $false
-                    for ($i = 0; $i -lt 90; $i++) {
-                        try {
-                            $t = New-Object Net.Sockets.TcpClient
-                            $t.Connect('127.0.0.1', 1433)
-                            $t.Close()
-                            $ok = $true
-                            break
-                        } catch { Start-Sleep -Seconds 2 }
+                    for ($i = 0; $i -lt 150; $i++) {
+                        $logs = (docker logs $env:DB_CI_NAME 2>&1 | Out-String)
+                        if ($logs -match 'SQL Server is now ready for client connections') { $ok = $true; break }
+                        $running = (docker inspect -f '{{.State.Running}}' $env:DB_CI_NAME 2>$null | Out-String).Trim()
+                        if ($running -ne 'true') { Write-Output 'Container da dung chay som' ; break }
+                        Start-Sleep -Seconds 2
                     }
-                    if (-not $ok) { throw 'SQL Server khong mo duoc port 1433' }
-                    Start-Sleep -Seconds 20
+                    if (-not $ok) {
+                        Write-Output '=== trang thai container ==='
+                        docker ps -a --filter name=$env:DB_CI_NAME
+                        Write-Output '=== logs container ==='
+                        docker logs $env:DB_CI_NAME 2>&1 | Select-Object -Last 40
+                        throw 'SQL Server khong ready duoc'
+                    }
+                    # Cho port 1433 mo that su (toi da 60s)
+                    for ($i = 0; $i -lt 30; $i++) {
+                        try { $t = New-Object Net.Sockets.TcpClient; $t.Connect('127.0.0.1', 1433); $t.Close(); break } catch { Start-Sleep -Seconds 2 }
+                    }
                     Write-Output 'SQL Server da san sang'
                 '''
             }
@@ -69,6 +78,14 @@ pipeline {
         stage('Backend test (Maven)') {
             steps {
                 powershell '''
+                    # Dam bao CI DB con chay truoc khi test (tru hang cho khong can thiet)
+                    $st = (docker inspect -f '{{.State.Status}}' $env:DB_CI_NAME 2>$null | Out-String).Trim()
+                    Write-Output "CI DB trang thai truoc test: $st"
+                    if ($st -ne 'running') {
+                        docker ps -a --filter name=$env:DB_CI_NAME
+                        docker logs $env:DB_CI_NAME 2>&1 | Select-Object -Last 40
+                        throw 'CI DB khong con chay truoc khi test'
+                    }
                     if (-not $env:JAVA_HOME) { $env:JAVA_HOME = $env:JDK_FALLBACK }
                     $env:Path = "$env:JAVA_HOME\\bin;" + $env:Path
                     java -version
@@ -140,11 +157,14 @@ pipeline {
 
     post {
         always {
-            // Don container CI (khong anh huong toi stack deploy dang chay)
-            powershell 'docker rm -f $env:DB_CI_NAME 2>$null | Out-Null; exit 0'
-        }
-        failure {
-            powershell 'docker logs $env:DB_CI_NAME 2>&1 | Select-Object -Last 100; exit 0'
+            // Log truoc, xoa sau — post "always" chay truoc "failure" nen neu tach
+            // thanh 2 block se mat log khi phan tich loi
+            powershell '''
+                Write-Output '=== logs CI DB (truoc khi xoa) ==='
+                docker logs $env:DB_CI_NAME 2>&1 | Select-Object -Last 60
+                docker rm -f $env:DB_CI_NAME 2>$null | Out-Null
+                exit 0
+            '''
         }
     }
 }
