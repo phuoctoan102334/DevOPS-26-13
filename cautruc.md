@@ -1,9 +1,9 @@
 # Cấu Trúc Dự Án (cautruc.md)
-Cập nhật lúc: 2026-10-10 07:35
+Cập nhật lúc: 2026-10-11 16:00
 Stack: Java 21 / Spring Boot 3.4.1 (Maven) + Thymeleaf + JPA + SQL Server
 
 ## Tổng quan
-Quản lý sinh viên (LAB 03), đã tách 3 phần rõ ràng: backend (Spring Boot REST + view Thymeleaf), frontend (HTML thuần gọi REST API, chạy riêng), database (script SQL).
+Quản lý sinh viên (LAB 03), đã tách 3 phần rõ ràng: backend (Spring Boot REST + view Thymeleaf), frontend (HTML thuần gọi REST API, chạy riêng), database (script SQL). CI/CD bằng Jenkins trong container theo Bài 2: BUILD → TEST → PUSH → PULL → DEPLOY, registry GHCR.
 
 ## Cây thư mục chính
 - backend/ — project Maven Spring Boot (build từ đây)
@@ -22,9 +22,15 @@ Quản lý sinh viên (LAB 03), đã tách 3 phần rõ ràng: backend (Spring B
 - cautruc.md — snapshot cấu trúc này
 - nhatky.md — nhật ký cô đọng các thay đổi
 - README.md — hướng dẫn build + chạy dự án (Docker và local), bảng REST API, mục CI/CD Jenkins
+- run.md — bảng cổng đầy đủ (3000/8080/1433 dev+prod, 13000/18080/11433 test, Jenkins 8090+50000, Jenkins Windows 8081) + cách chạy từng kịch bản A/B/C và bảng sự cố
 - docker-compose.yml — orchestrate 3 container: database (SQL Server 2022), backend (port 8080), frontend (port 3000); volume sqldata giữ data
-- Jenkinsfile — Jenkins CI/CD trên Windows agent: SQL Server container → mvnw test → docker login/push Docker Hub (<user>/studentmanager-*) → stage Deploy (nhánh main/master)
-- docker-compose.deploy.yml — deploy stack từ image Docker Hub (pull, không build); dùng chung volume sqldata/port với docker-compose.yml, chỉ chạy 1 trong 2
+- docker-compose.test.yml — stage TEST của pipeline: chạy 3 image local vừa build (pull_policy: never), port rieng 11433/18080/13000, project name sms-test, down -v sau mỗi lần
+- docker-compose.prod.yml — stage DEPLOY: pull image từ GHCR (pull_policy: always), project name studentmanager-prod, port chuẩn 1433/8080/3000
+- ~~docker-compose.deploy.yml~~ — ĐÃ XÓA (2026-10-11): bản cũ deploy bằng Docker Hub, thay bằng docker-compose.prod.yml (GHCR). Bản lưu tại `.backup/docker-compose.deploy.yml/`
+- Jenkinsfile — pipeline Jenkins (Bài 2): stage Chuan bị → BUILD → TEST (smoke-test) → PUSH (GHCR) → PULL (rmi + pull) → DEPLOY → Kiem tra sau deploy; agent = container Jenkins Linux nên viết bằng sh, không phải powershell
+- jenkins/Dockerfile — từ jenkins/jenkins:lts-jdk17, cài docker CLI + compose + buildx + git/curl, tắt setup wizard, cài sẵn plugin git/pipeline/credentials
+- jenkins/docker-compose.yml — container jenkins (UI port **8090**, agent 50000), DooD: mount /var/run/docker.sock, group_add ["0"] (socket root:root 660), extra_hosts host-gateway; volume jenkins_home. Đổi từ 8080 → 8090 vì 8080 là cổng backend của app (giữ 8080 cho app theo hướng dẫn)
+- scripts/smoke-test.sh — 8 phép thử (frontend 200, API 200, data seed, get by id, search, POST add, count tăng, delete) — đã chạy thật: 8/8 PASS
 - backend/Dockerfile (+ .dockerignore) — multi-stage Maven build → JRE 21, chạy jar Spring Boot
 - frontend/Dockerfile (+ nginx.conf) — nginx serve index.html, proxy /api/ → backend:8080
 - database/Dockerfile (+ entrypoint-init.sh) — SQL Server 2022, tự tạo DB school + bảng students khi khởi động (idempotent)
@@ -56,5 +62,11 @@ Quản lý sinh viên (LAB 03), đã tách 3 phần rõ ràng: backend (Spring B
 - Mật khẩu SA mặc định trong compose: `SA_Passw0rd1` (đổi qua biến môi trường MSSQL_SA_PASSWORD trước khi up; backend tự nhận qua env SPRING_DATASOURCE_*)
 - application.properties chứa tài khoản/mật khẩu DB — không in log/commit giá trị thật
 - Đổi schema database, xóa file/table = mức Cao, cần xác nhận Y/N
-- Git: repo báo "dubious ownership" với lệnh git thường — chỉ chạy được với `git -c safe.directory=D:/Devops/DevOPS-26-13 ...` (KHÔNG ghi safe.directory vào config global nếu chưa được yêu cầu). Nhánh `thinh-upp` đã push commit bbb96a3 (Jenkins CI/CD) lên origin; remote cũ `Student-Management-System.git` đã chuyển sang `https://github.com/phuoctoan102334/DevOPS-26-13.git` (redirect vẫn chạy). File chưa track: .github/, luat.md; thay đổi riêng của user trong image_thinh/ (xóa ảnh cũ, thêm ubuntu/) chưa commit
-- Trạng thái runtime (lần ghi nhận gần nhất 2026-09-26): container Docker đã dừng tất cả — chạy lại bằng `docker compose up -d`
+- Git: repo báo "dubious ownership" với lệnh git thường — chỉ chạy được với `git -c safe.directory=D:/Devops/DevOPS-26-13 ...` (KHÔNG ghi safe.directory vào config global nếu chưa được yêu cầu). Branch mặc định của repo là `master` (không phải main). File chưa track: .github/, luat.md, huong-dan-jenkins.md, jenkins/, scripts/, docker-compose.test.yml, docker-compose.prod.yml; thay đổi riêng của user trong image_thinh/ chưa commit
+- **Máy này x86_64 (amd64), KHÔNG phải arm64** như máy macOS trong hướng dẫn gốc → pipeline chỉ build/push `linux/amd64`; SQL Server 2022 không có manifest arm64 nên multi-arch sẽ fail "no matching manifest"
+- Docker Desktop trên máy này: socket mount `/var/run/docker.sock` vào container HOẠT ĐỘNG (đã kiểm chứng); named pipe `//./pipe/docker_engine` mount thành file rỗng → KHÔNG dùng; `host.docker.internal` resolve được (192.168.65.254 / fdc4:...::254)
+- Host Windows này KHÔNG có `bash` hoạt động (WSL relay lỗi "execvpe(/bin/bash)") → smoke-test phải chạy từ trong container; các lệnh sh trong pipeline đều chạy trong container Jenkins nên không ảnh hưởng
+- **Jenkins trên máy có 2 bản:** (1) Jenkins Windows service gốc tại `C:\Program Files\Jenkins` — port **8081**, job multibranch `student-manager` + credential `dockerhub-cred`/`github-pat`, dùng cho pipeline cũ — **đã set `<disabled>true</disabled>` trong config.xml** (backup `config.xml.bak.20261011_1540`) nhưng **cần restart dịch vụ Jenkins với quyền admin** mới có hiệu lực (không có quyền restart từ phiên này); (2) Jenkins **container** mới (Bài 2) — port **8090**, dùng credential `ghcr-credentials`. Job mới phải tạo trên Jenkins container.
+- Docker Hub credential cũ `dockerhub-cred` (trong Jenkins Windows 8081) không còn dùng — GIỮ LẠI, không xóa (chỉ file docker-compose.deploy.yml đã xóa theo xác nhận Y/N)
+- Trạng thái runtime (lần ghi nhận 2026-10-11 15:05): Docker Desktop chạy; container `jenkins` chạy (UI 8090, agent 50000, Jenkins URL đã set `http://localhost:8090/`); stack **prod đang chạy** ở 3000/8080/1433 (project `studentmanager-prod`, image đã deploy qua registry cục bộ); 3 image local `ghcr.io/phuoctoan102334/studentmanager-*:master`; registry tạm `localhost:5000` + stack test sms-test đã dọn sạch
+- Chưa chạy được pipeline TRONG Jenkins: thiếu credential `ghcr-credentials` (cần GitHub PAT có `write:packages`/`read:packages` — người dùng tự tạo) và job Pipeline chưa tạo

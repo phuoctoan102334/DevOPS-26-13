@@ -1,0 +1,41 @@
+# Dung Jenkins cho Bai 2 (chay trong container, dieu khien Docker cua laptop):
+#   docker compose -f jenkins/docker-compose.yml up -d --build
+# Mo: http://localhost:8090 — vao thang giao dien, khong hoi mat khau.
+# Dung:  docker compose -f jenkins/docker-compose.yml down
+#
+# Diem mau chot (DooD): container Jenkins KHONG chay Docker rieng ben trong. No chi co
+# docker CLI, dieu khien Docker Desktop cua laptop qua socket duoc mount vao. He qua:
+# image build ra nam tren laptop, va `docker compose up` mo cong TREN LAPTOP →
+# mo http://localhost:3000 la thay app ngay.
+#
+# Windows/Linux:
+#   - /var/run/docker.sock hoat tro tren Docker Desktop (WSL2) — da kiem thu.
+#   - group_add ["0"] vi socket thuoc root:root 660; user jenkins (uid 1000) can gid 0
+#     moi doc/ghi duoc. Tren Linux doi "0" thanh ket qua `stat -c '%g' /var/run/docker.sock`.
+#   - host.docker.internal cho phep container Jenkins goi ra host (stage kiem tra sau deploy).
+#   - CONG: dung 8090 cho Jenkins UI, KHONG dung 8080. Vi backend cua app trong
+#     docker-compose.yml / docker-compose.prod.yml can chinh cong 8080 — neu Jenkins
+#     nam 8080 thi stage DEPLOY bi loi "port is already allocated" (huong dan muc 4.1
+#     cung de xuat 8090 khi 8080 bi chiem). Mo: http://localhost:8090
+
+services:
+  jenkins:
+    build: .
+    container_name: jenkins
+    restart: unless-stopped
+    ports:
+      - "8090:8080"
+      - "50000:50000"
+    environment:
+      JAVA_OPTS: "-Djenkins.install.runSetupWizard=false"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      # DooD — dieu khien Docker Desktop cua host, khong phai Docker trong container
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "0"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  jenkins_home:

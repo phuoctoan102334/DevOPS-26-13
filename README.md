@@ -10,7 +10,12 @@
 ├── backend/     ← API + server Spring Boot (Maven)
 ├── frontend/    ← index.html (giao diện thuần JS gọi REST API)
 ├── database/    ← script SQL (database-setup.sql) + Dockerfile SQL Server
-├── docker-compose.yml
+├── jenkins/     ← Dockerfile + compose dựng Jenkins trong container (Bài 2)
+├── scripts/     ← smoke-test.sh (8 phép thử, dùng trong stage TEST)
+├── docker-compose.yml        ← dev local (build từ source)
+├── docker-compose.test.yml   ← stage TEST (image local, port 13000/18080/11433)
+├── docker-compose.prod.yml   ← stage DEPLOY (pull image từ GHCR)
+├── Jenkinsfile               ← pipeline BUILD → TEST → PUSH → PULL → DEPLOY
 ```
 
 ---
@@ -86,36 +91,68 @@ Body mẫu:
 
 ---
 
-## CI/CD bằng Jenkins
+## CI/CD bằng Jenkins (Bài 2: BUILD → TEST → PUSH → PULL → DEPLOY)
 
-Pipeline nằm ở `Jenkinsfile` (root), chạy trên agent **Windows** (Docker Desktop đang chạy). luồng công việc:
+> **Bảng cổng đầy đủ + cách chạy từng kịch bản (dev / pipeline Jenkins / chạy tay không Jenkins): xem [`run.md`](run.md).**
+
+Toàn bộ pipeline nằm ở `Jenkinsfile` (root), chạy trong **container Jenkins** (xem `jenkins/`) điều khiển Docker của laptop qua socket — kiểu **DooD** (Docker outside of Docker). Cuối pipeline, app chạy thật ở **http://localhost:3000** từ image **đã kéo về từ registry**, không phải image local.
 
 ```
-Checkout (GitHub) → SQL Server container → mvn test (backend)
-→ docker login Docker Hub → build & push 3 image → deploy bằng docker-compose.deploy.yml
+Chuẩn bị → BUILD (3 image) → TEST (smoke-test 8 phép thử) → PUSH (GHCR)
+→ PULL (docker rmi + docker pull) → DEPLOY (compose.prod) → Kiểm tra sau deploy
 ```
 
-**Chuẩn bị trên Jenkins (1 lần):**
+**Vì sao có stage PULL:** image vừa build đang nằm sẵn trên máy. Nếu deploy bằng image local, bạn không chứng minh được image trên registry dùng được (lỡ push hỏng/thiếu layer — deploy vẫn chạy ngon nhưng server thật kéo về sẽ chết). Nên PULL cố tình `docker rmi` bản local rồi mới `docker pull`, ép Docker tải thật từ registry.
 
-1. Cài plugin: **Pipeline**, **Git**.
-2. Tạo credential **`dockerhub-cred`** (loại *Username with password*):
-   - Username: user Docker Hub
-   - Password: Personal Access Token (PAT) tạo tại https://hub.docker.com → Account Settings → Personal access tokens (quyền *Read & Write*)
-3. Tạo job **Multibranch Pipeline** trỏ vào repo GitHub này (Jenkinsfile ở root sẽ tự được đọc).
-4. Agent Windows cần: Docker Desktop đang chạy, `git` trong PATH; JDK mặc định pipeline dùng `C:\oracleJdk-27` (đổi biến `JDK_FALLBACK` trong `Jenkinsfile` nếu máy khác).
+### Dựng Jenkins (1 lần)
 
-**Kết quả mỗi lần build:**
+```bash
+cd jenkins
+docker compose up -d --build     # lần đầu ~3–5 phút
+```
 
-- Image push lên Docker Hub: `<user>/studentmanager-backend|frontend|database` với tag: tên nhánh, commit sha12, và `latest` (nhánh `main`/`master`).
-- **Mọi nhánh** đều có stage **Deploy tự động** — image push tag tên nhánh (+ `latest` ở nhánh `main`/`master`), rồi `docker compose -f docker-compose.deploy.yml pull && up -d` (chạy stack từ image vừa push, không build lại source).
+Mở **http://localhost:8090** — vào thẳng giao diện, không hỏi mật khẩu (đã tắt setup wizard). (Dùng 8090 chứ không phải 8080, vì 8080 là cổng backend của app — nếu Jenkins giữ 8080 thì stage DEPLOY sẽ lỗi *port is already allocated*.) Kiểm tra Jenkins gọi được Docker:
+
+```bash
+docker exec jenkins docker version --format '{{.Server.Version}}'
+# phải ra số version, ví dụ 29.8.1
+```
+
+### Chuẩn bị trên Jenkins (1 lần)
+
+1. Tạo **GitHub PAT**: Settings → Developer settings → Personal access tokens → Tokens (classic) → tick `write:packages` + `read:packages` → copy ngay (chỉ hiện một lần).
+2. Tạo credential **`ghcr-credentials`** (loại *Username with password*): Username = tên GitHub, Password = **PAT** vừa tạo (không phải mật khẩu GitHub). ID phải đúng `ghcr-credentials`.
+3. Tạo job **Pipeline** (New Item → Pipeline), phần Pipeline chọn:
+   - Definition: **Pipeline script from SCM**
+   - Repository URL: `https://github.com/<TÊN_GITHUB>/DevOPS-26-13.git`
+   - Branch Specifier: `*/master`
+   - Script Path: `Jenkinsfile`
+
+### Kết quả mỗi lần build
+
+- Image push lên GHCR: `ghcr.io/<user>/studentmanager-backend|frontend|database` với tag: tên nhánh, commit sha12, và `latest` (nhánh `master`).
+- **Tự động deploy** bằng `docker-compose.prod.yml` (chỉ `image:`, không `build:`) — stack chạy từ image vừa kéo về.
+- Mở **http://localhost:3000** → app đã đi trọn vòng build → test → push → pull → deploy.
+
+### 3 file compose, mỗi file một vai trò
+
+| File | Dùng khi | Nguồn image |
+|---|---|---|
+| `docker-compose.yml` | Dev local (`docker compose up -d`) | `build:` từ source |
+| `docker-compose.test.yml` | Stage **TEST** trong pipeline | image local vừa build (`pull_policy: never`), port rieng 13000/18080/11433 |
+| `docker-compose.prod.yml` | Stage **DEPLOY** / deploy tay | pull từ GHCR (`pull_policy: always`) |
+
+Cả ba dùng chung volume `sqldata` và port 1433/8080/3000 (riêng file test dùng port khác) — chỉ chạy 1 trong 2 tại một thời điểm.
 
 **Deploy tay bằng image từ registry** (không cần Jenkins):
 
 ```powershell
-$env:IMAGE_NS = "<user-dockerhub>"
-$env:IMAGE_TAG = "latest"          # hoặc tên nhánh / sha12
-docker compose -f docker-compose.deploy.yml up -d
+$env:IMAGE_NS = "ghcr.io/<user-github>"
+$env:IMAGE_TAG = "master"          # hoặc tên nhánh / sha12
+docker compose -p studentmanager-prod -f docker-compose.prod.yml up -d
 ```
 
-- `docker-compose.yml` (build từ source) và `docker-compose.deploy.yml` (pull image) dùng chung volume `sqldata` và các port 1433/8080/3000 — chỉ chạy 1 trong 2 tại một thời điểm.
-- Mật khẩu DB: đặt biến `MSSQL_SA_PASSWORD` (mặc định trong compose); credential Docker Hub chỉ nằm trong Jenkins, không commit vào repo.
+- Mật khẩu DB: đặt biến `MSSQL_SA_PASSWORD` (mặc định trong compose); PAT GitHub chỉ nằm trong Jenkins, không commit vào repo.
+- **Nếu chưa tạo credential `ghcr-credentials`**: pipeline sẽ fail ngay ở dòng đầu tiên (`Could not find credentials entry with ID 'ghcr-credentials'`) — chưa chạy tới stage nào cả. Tạo xong credential rồi bấm **Build Now** lại là được.
+- **Sau khi build xong, kiểm chứng 4 điểm:** (1) mục *Test Report*/console thấy `App sẵn sàng sau ...s` + JSON danh sách sinh viên; (2) image đã có trên GHCR: https://github.com/phuoctoan102334?tab=packages; (3) `docker ps` thấy 3 container `studentmanager-prod-*`; (4) http://localhost:3000 hiển thị bảng sinh viên.
+- **Lưu ý kiến trúc:** máy này là x86_64 và image SQL Server 2022 chỉ có manifest `linux/amd64` — nên pipeline chỉ build/push `linux/amd64` (không multi-arch như bản macOS-arm64 trong hướng dẫn gốc).

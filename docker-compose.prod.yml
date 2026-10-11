@@ -1,13 +1,21 @@
-# Deploy bản image ĐÃ push lên Docker Hub (dùng trong stage Deploy của Jenkinsfile)
-# Chạy tay (nếu cần):
-#   $env:IMAGE_NS = "<user-dockerhub>"; $env:IMAGE_TAG = "latest"
-#   docker compose -f docker-compose.deploy.yml up -d
-# Khác docker-compose.yml ở chỗ: không build từ source, mà pull image từ registry.
+# Stack PROD — deploy bang image DA PUSH len GHCR (stage DEPLOY cua Jenkinsfile).
+# Khong build tu source (image:, khong build:) — chi pull ve va chay, dung nhu server that.
+# Ten image: ghcr.io/<user>/studentmanager-<backend|frontend|database>:<tag>
+#
+# Chay tay (khong can Jenkins):
+#   $env:IMAGE_NS = "ghcr.io/<user-dockerhub-cua-ban>"   # PowerShell
+#   $env:IMAGE_TAG = "master"                            # hoac ten nhánh / sha12
+#   docker compose -p studentmanager-prod -f docker-compose.prod.yml up -d
+#
+# Luu y:
+#   - Dung volume/prefix rieng (studentmanager-prod) de khong cham cung docker-compose.yml
+#     (build tu source). Chi chay 1 trong 2 luc mot thoi vi dung chung port 1433/8080/3000.
+#   - Dat MSSQL_SA_PASSWORD truoc khi up (gia tri mac dinh chi danh cho lab local).
 
 services:
   database:
-    image: ${IMAGE_NS:?Hay set bien IMAGE_NS (user Docker Hub)}/studentmanager-database:${IMAGE_TAG:-latest}
-    pull_policy: always
+    image: ${IMAGE_NS:?Hay set IMAGE_NS (vd ghcr.io/<user>)}/studentmanager-database:${IMAGE_TAG:-master}
+    pull_policy: always # keo lai tu registry — chong truong hop tag bi ghi de
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_PID: "Developer"
@@ -25,7 +33,7 @@ services:
     restart: unless-stopped
 
   backend:
-    image: ${IMAGE_NS:?Hay set bien IMAGE_NS (user Docker Hub)}/studentmanager-backend:${IMAGE_TAG:-latest}
+    image: ${IMAGE_NS:?Hay set IMAGE_NS (vd ghcr.io/<user>)}/studentmanager-backend:${IMAGE_TAG:-master}
     pull_policy: always
     ports:
       - "8080:8080"
@@ -39,7 +47,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: ${IMAGE_NS:?Hay set bien IMAGE_NS (user Docker Hub)}/studentmanager-frontend:${IMAGE_TAG:-latest}
+    image: ${IMAGE_NS:?Hay set IMAGE_NS (vd ghcr.io/<user>)}/studentmanager-frontend:${IMAGE_TAG:-master}
     pull_policy: always
     ports:
       - "3000:80"
