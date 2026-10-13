@@ -38,13 +38,19 @@ docker compose down
 docker compose down -v
 ```
 
-Sau khi chạy, truy cập:
+### Bảng cổng
 
-| Dịch vụ | URL / Port |
-|---|---|
-| Frontend (giao diện) | http://localhost:3000 |
-| Backend (REST API) | http://localhost:8080/api/students |
-| SQL Server | localhost:1433 |
+| Stack | Frontend | REST API | Database |
+|---|---|---|---|
+| **Dev** (`docker compose up -d`) và **Prod** (`docker-compose.prod.yml`) | **3000** | **8080** | **1433** |
+| **Test** (`docker-compose.test.yml`) — chạy song song được | 13000 | 18080 | 11433 |
+| **Jenkins container** | — | UI **8090**, agent 50000 | — |
+| Jenkins Windows (bản cũ, service) | — | 8081 | — |
+
+- Browser chỉ cần **3000**: nginx tự proxy `/api/` → `backend:8080`.
+- Dev và Prod **dùng chung 3000/8080/1433** → chỉ chạy 1 trong 2 tại một thời điểm. Stack test có cổng riêng nên chạy song song được.
+- Jenkins phải đặt ở **8090**, không được dùng 8080 (8080 là cổng backend — nếu Jenkins giữ thì stage DEPLOY lỗi *port is already allocated*).
+- Muốn hai app cùng chạy lúc thì phải đổi cổng cho một app; nếu ép cùng cổng thì app sau sẽ "Up" nhưng **không có cổng host** (container kẹt ở trạng thái `Created`) — dấu hiệu nhận ra qua `docker inspect <container> --format '{{json .NetworkSettings.Ports}}'` cho kết quả `{}`.
 
 - Container `database` tự chạy `database-setup.sql`: tạo database `school`, bảng `students` + dữ liệu mẫu khi khởi động (bỏ qua nếu đã tồn tại).
 - Kiểm tra nhanh: mở http://localhost:3000 → bảng sinh viên tự tải; hoặc `curl http://localhost:8080/api/students`.
@@ -93,7 +99,7 @@ Body mẫu:
 
 ## CI/CD bằng Jenkins (Bài 2: BUILD → TEST → PUSH → PULL → DEPLOY)
 
-> **Bảng cổng đầy đủ + cách chạy từng kịch bản (dev / pipeline Jenkins / chạy tay không Jenkins): xem [`run.md`](run.md).**
+> Bảng cổng ở đầu README. Chạy tay không cần Jenkins: xem mục **[Chạy tay không cần Jenkins](#chạy-tay-không-cần-jenkins)** phía dưới.
 
 Toàn bộ pipeline nằm ở `Jenkinsfile` (root), chạy trong **container Jenkins** (xem `jenkins/`) điều khiển Docker của laptop qua socket — kiểu **DooD** (Docker outside of Docker). Cuối pipeline, app chạy thật ở **http://localhost:3000** từ image **đã kéo về từ registry**, không phải image local.
 
@@ -144,13 +150,34 @@ docker exec jenkins docker version --format '{{.Server.Version}}'
 
 Cả ba dùng chung volume `sqldata` và port 1433/8080/3000 (riêng file test dùng port khác) — chỉ chạy 1 trong 2 tại một thời điểm.
 
-**Deploy tay bằng image từ registry** (không cần Jenkins):
+### Chạy tay không cần Jenkins
+
+Làm đủ 4 bước dưới đây trong PowerShell (ở thư mục gốc repo). `<ten>` là tên GitHub của bạn (viết thường):
 
 ```powershell
-$env:IMAGE_NS = "ghcr.io/<user-github>"
-$env:IMAGE_TAG = "master"          # hoặc tên nhánh / sha12
+$NS = "ghcr.io/<ten>"; $TAG = "master"
+
+# 1. BUILD — 3 image linux/amd64
+foreach ($c in "backend","frontend","database") { docker build --platform linux/amd64 -t "$NS/studentmanager-$c`:$TAG" $c }
+
+# 2. TEST — stack test (cổng 13000/18080/11433), smoke-test phải ra "8 dat, 0 huong"
+$env:IMAGE_NS = $NS; $env:IMAGE_TAG = $TAG
+docker compose -p sms-test -f docker-compose.test.yml up -d
+docker run --rm -v ${PWD}:/app -w /app -e BASE_URL=http://host.docker.internal:13000 alpine sh -c "apk add --no-cache curl >/dev/null 2>&1; sh scripts/smoke-test.sh"
+docker compose -p sms-test -f docker-compose.test.yml down -v
+
+# 3. PUSH — cần PAT: docker login hỏi password, dán PAT vào (không phải mật khẩu GitHub)
+docker login ghcr.io -u <ten>
+foreach ($c in "backend","frontend","database") { docker push "$NS/studentmanager-$c`:$TAG" }
+
+# 4. DEPLOY — kéo lại từ registry rồi chạy app ở cổng 3000/8080/1433
+docker compose -p studentmanager-prod -f docker-compose.prod.yml pull
 docker compose -p studentmanager-prod -f docker-compose.prod.yml up -d
+docker compose -p studentmanager-prod -f docker-compose.prod.yml ps   # chờ database healthy
+curl http://localhost:3000/api/students
 ```
+
+(Máy này không có `bash` chạy được nên smoke-test phải chạy qua container `alpine` tạm như trên; trong Jenkins thì chỉ cần `bash scripts/smoke-test.sh`.)
 
 - Mật khẩu DB: đặt biến `MSSQL_SA_PASSWORD` (mặc định trong compose); PAT GitHub chỉ nằm trong Jenkins, không commit vào repo.
 - **Nếu chưa tạo credential `ghcr-credentials`**: pipeline sẽ fail ngay ở dòng đầu tiên (`Could not find credentials entry with ID 'ghcr-credentials'`) — chưa chạy tới stage nào cả. Tạo xong credential rồi bấm **Build Now** lại là được.
