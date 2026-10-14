@@ -7,31 +7,31 @@
 
 **A.**
 
-![Cài Ubuntu - A](image_thinh/ubuntu/tải_ubuntu_1.jpg)
+![Cài Ubuntu, tạo tài khoản thinh](image_thinh/hinh_4.1_cai_ubuntu_tao_tai_khoan_thinh.jpg)
 
 **B.**
 
-![Cài Ubuntu - B](image_thinh/ubuntu/tải_ubuntu_2.jpg)
+![Thông tin hệ thống Ubuntu](image_thinh/hinh_4.2_thong_tin_he_thong_ubuntu.jpg)
 
 ## 2. Ssh từ unbuntu vào win
 
-![SSH từ Ubuntu vào Win - 1](image_thinh/ssh_unbuntu_vs_win/ssh1.png)
+![Truy cập /mnt/c từ Ubuntu](image_thinh/hinh_4.3_truy_cap_mnt_c_tu_ubuntu.png)
 
-![SSH từ Ubuntu vào Win - 2](image_thinh/ssh_unbuntu_vs_win/ssh2.png)
+![SSH từ Ubuntu vào Win](image_thinh/hinh_4.4_ssh_tu_ubuntu_vao_win.png)
 
 ## 3. Sài lệnh và tạo file
 
 **A.**
 
-![Dùng lệnh và tạo file - A](image_thinh/ubuntu/sài_lệnh_và_tạo_file_txt_1.jpg)
+![Docker pull và run alpine](image_thinh/hinh_4.5_docker_pull_va_run_alpine.png)
 
 **B.**
 
-![Dùng lệnh và tạo file - B](image_thinh/ubuntu/sài_lệnh_và_tạo_file_txt_2.jpg)
+![Docker exec vào container](image_thinh/hinh_4.6_docker_exec_vao_container.png)
 
 ## 4. Viết Jenkins cho dự án
 
-![Viết Jenkins cho dự án](image_thinh/bao_cao_jenkins.png)
+![Jenkins build #11 thành công](image_thinh/hinh_4.7_jenkins_build_11_thanh_cong.png)
 
 ---
 
