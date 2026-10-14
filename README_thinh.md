@@ -35,4 +35,4 @@
 
 ---
 
-*Thứ tự nội dung và ảnh lấy theo `image_thinh/Devops_bao_cao.docx`. Ảnh nằm trong `image_thinh/`.*
+*Thứ tự nội dung và ảnh lấy theo `image_thinh`. Ảnh nằm trong `image_thinh/`.*
