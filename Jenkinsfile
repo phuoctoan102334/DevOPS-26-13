@@ -24,8 +24,8 @@ pipeline {
 
   environment {
     REGISTRY   = 'ghcr.io'
-    // ĐỔI thành tài khoản GitHub của bạn nếu fork (BẮT BUỘC viết thường)
-    IMAGE_NAME = 'phuoctoan102334/student-management'
+    // Tài khoản GHCR phải là CHỦ token trong credential (token o_ thuoc DanhTaiSeck)
+    IMAGE_NAME = 'danhtaiceck/student-management'
     IMAGE      = "${REGISTRY}/${IMAGE_NAME}"
 
     // Credential kiểu "Username with password":
