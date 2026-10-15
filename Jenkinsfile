@@ -24,8 +24,9 @@ pipeline {
 
   environment {
     REGISTRY   = 'ghcr.io'
-    // Tài khoản GHCR phải là CHỦ token trong credential (token o_ thuoc DanhTaiSeck)
-    IMAGE_NAME = 'danhtaiceck/student-management'
+    // Namespace GHCR: PHẢI là org mà bạn là admin (tai khoan DanhTaiSeck bi GHCR tu choi),
+    // viet thuan toan bo
+    IMAGE_NAME = 'technology-assassin/student-management'
     IMAGE      = "${REGISTRY}/${IMAGE_NAME}"
 
     // Credential kiểu "Username with password":
