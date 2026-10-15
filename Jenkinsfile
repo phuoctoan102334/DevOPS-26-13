@@ -126,7 +126,7 @@ pipeline {
             """
           }
         }
-        sh "docker images ${IMAGE} --format 'table {{.Repository}}\\t{{.Tag}}\\t{{.Size}}'"
+        sh "docker images --filter=reference='${IMAGE}-*' --format 'table {{.Repository}}\\t{{.Tag}}\\t{{.Size}}'"
       }
     }
 

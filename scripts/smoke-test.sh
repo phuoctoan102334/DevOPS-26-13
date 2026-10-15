@@ -145,9 +145,14 @@ DEL=$(curl -s -X POST "$BASE_BE/api/students/delete/9001")
 echo "$DEL" | grep -q "Deleted student 9001" \
   && ok "POST /api/students/delete/{id} hoat dong" || bad "Delete: $(echo "$DEL" | head -c 200)"
 
-# --- 10. Sau xoa, GET tra ve null ---
+# --- 10. Sau xoa, GET khong con tra ve gi nua ---
+#   (@RestController tra body rỗng cho null, co the la "" hoac "null")
 BODY=$(curl -s "$BASE_BE/api/students/9001")
-[ "$BODY" = "null" ] && ok "Sau xoa, GET tra ve null" || bad "Sau xoa con lai: $(echo "$BODY" | head -c 200)"
+if [ -z "$BODY" ] || [ "$BODY" = "null" ]; then
+  ok "Sau xoa, GET khong con tra ve sinh vien"
+else
+  bad "Sau xoa con lai: $(echo "$BODY" | head -c 200)"
+fi
 
 echo "=== Ket qua: $PASS dat, $FAIL hong ==="
 [ "$FAIL" = "0" ] || exit 1
