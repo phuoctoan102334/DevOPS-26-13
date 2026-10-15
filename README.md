@@ -137,8 +137,9 @@ App chạy tại `http://localhost:8080`.
 Mục này ghi lại **toàn bộ quy trình CI/CD đã thực hiện thật** cho repo môn học
 `DevOPS-26-13` — ứng dụng quản lý sinh viên gồm `backend` (Spring Boot 3.4.1 / Java 21),
 `frontend` (nginx) và `database` (SQL Server 2022), điều phối bằng `docker-compose.yml`.
-Kết quả nghiệm thu là **build Jenkins #3 — SUCCESS** (15/10/2026, 3 phút 06 giây),
-ảnh chụp từng bước nằm trong `image_toan/`.
+Kết quả nghiệm thu là **build Jenkins #3 — SUCCESS** (15/10/2026, 3 phút 06 giây);
+ngay sau đó **build #4** được `pollSCM` tự kích hoạt khi phát hiện commit mới và cũng
+SUCCESS (2 phút 46 giây). Ảnh chụp từng bước nằm trong `image_toan/`.
 
 ### A.1. Tổng quan pipeline
 
@@ -237,7 +238,8 @@ Kết quả chi tiết:
 | 3 | Smoke test `000000` / `404` (build #2) | `localhost` bên trong container Jenkins là chính Jenkins (cũng nghe 8080) | Dùng `host.docker.internal`; `ci/smoke-test.sh` tự nhận diện môi trường (`/.dockerenv` + `getent hosts`) |
 | 4 | `403 No valid crumb` khi gọi API Jenkins | Crumb phải đi kèm session cookie | GET crumb rồi POST build trong cùng `WebRequestSession` / cùng cookie jar |
 
-Lịch sử build: **#1 FAILURE** (18s) → **#2 FAILURE** (6 phút 53 giây) → **#3 SUCCESS** (3 phút 06 giây).
+Lịch sử build: **#1 FAILURE** (18s) → **#2 FAILURE** (6 phút 53 giây) → **#3 SUCCESS** (3 phút 06 giây)
+→ **#4 SUCCESS** (2 phút 46 giây, `Started by an SCM change`, commit `6f36bce`).
 
 ![Dashboard Jenkins với job devops-26-13-cicd](image_toan/01-jenkins-dashboard.png)
 
