@@ -1,0 +1,30 @@
+# ===================================================================
+# Override cho CI/CD: thay "build:" của docker-compose.yml bằng "image:"
+# để compose KHÔNG build lại, chạy đúng image đã push/pull từ registry.
+#
+#   BACKEND_IMAGE=... FRONTEND_IMAGE=... DATABASE_IMAGE=... \
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Yêu cầu Docker Compose >= 2.24 (dùng !reset và !override).
+# Docker Desktop hiện tại đã đáp ứng; kiểm tra bằng:  docker compose version
+# ===================================================================
+
+services:
+  database:
+    # !reset xoá section build kế thừa từ docker-compose.yml
+    build: !reset null
+    image: "${DATABASE_IMAGE}"
+    ports: !override
+      - "${DB_PORT:-1433}:1433"
+
+  backend:
+    build: !reset null
+    image: "${BACKEND_IMAGE}"
+    ports: !override
+      - "${BACKEND_PORT:-8080}:8080"
+
+  frontend:
+    build: !reset null
+    image: "${FRONTEND_IMAGE}"
+    ports: !override
+      - "${FRONTEND_PORT:-3000}:80"

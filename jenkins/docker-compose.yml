@@ -1,0 +1,52 @@
+# Dựng Jenkins chạy trên máy.
+#
+#   cd jenkins
+#   docker compose up -d --build
+#   -> http://localhost:8090   (8090 vì 8080 đã dành cho backend của app)
+#
+# Trên Windows: chạy Docker Desktop (WSL2 backend) là đủ, socket
+# /var/run/docker.sock có sẵn trong WSL.
+#
+# LƯU Ý: file này ĐỘC LẬP với docker-compose.yml của ứng dụng ở thư mục cha.
+# Jenkins là hạ tầng CI/CD, không phải một phần của app.
+
+services:
+  jenkins:
+    build: .
+    container_name: jenkins
+    ports:
+      # Cố tình 8090: container backend của app chiếm 8080 trên laptop
+      - "8090:8080"    # giao diện web
+      - "50000:50000"  # cổng cho agent (bài này chưa dùng, để sẵn)
+    volumes:
+      # Dữ liệu Jenkins (job, config, lịch sử build) - sống sót khi xoá container
+      - jenkins_home:/var/jenkins_home
+
+      # ===== DÒNG QUAN TRỌNG NHẤT =====
+      # Cho container Jenkins điều khiển Docker của máy.
+      # Nhờ đó "docker build" trong pipeline tạo image NGAY TRÊN máy,
+      # và "docker compose up" deploy ra cổng 3000/8080/1433 của máy.
+      # Thiếu dòng này pipeline báo "Cannot connect to the Docker daemon".
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    group_add:
+      # Cấp quyền đọc/ghi docker.sock cho user "jenkins" trong container.
+      # Trên Docker Desktop (Windows/macOS) socket thuộc group id 0.
+      # Trên Linux: đổi thành group id thật, xem bằng:  stat -c '%g' /var/run/docker.sock
+      - "0"
+
+    extra_hosts:
+      # Để Jenkins trong container gọi ra máy host bằng tên
+      # host.docker.internal (stage "6. Kiểm tra sau deploy" cần).
+      # Docker Desktop đã có sẵn, dòng này thêm cho chắc và chạy được cả trên Linux.
+      - "host.docker.internal:host-gateway"
+
+    environment:
+      # Bỏ qua wizard hỏi tạo user - bài học đỡ mất bước.
+      # KHÔNG dùng cách này cho Jenkins thật ngoài production.
+      JAVA_OPTS: "-Djenkins.install.runSetupWizard=false"
+
+    restart: unless-stopped
+
+volumes:
+  jenkins_home:
