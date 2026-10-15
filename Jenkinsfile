@@ -101,7 +101,7 @@ pipeline {
           echo "=== Cho backend san sang (toi da 180s) ==="
           for i in $(seq 1 60); do
             c=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 \
-                "http://localhost:${DEPLOY_BACKEND_PORT}/api/students" || true)
+                "http://host.docker.internal:${DEPLOY_BACKEND_PORT}/api/students" || true)
             if [ "$c" = "200" ]; then
               echo "backend OK sau $((i*3))s"
               break
@@ -162,7 +162,7 @@ pipeline {
           echo "=== Cho backend san sang (toi da 180s) ==="
           for i in $(seq 1 60); do
             c=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 \
-                "http://localhost:${DEPLOY_BACKEND_PORT}/api/students" || true)
+                "http://host.docker.internal:${DEPLOY_BACKEND_PORT}/api/students" || true)
             if [ "$c" = "200" ]; then
               echo "backend OK sau $((i*3))s"
               break
