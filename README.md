@@ -130,124 +130,145 @@ App chạy tại `http://localhost:8080`.
 ### 2.4. Source code trên GitHub
 
 `git init` → commit → push: https://github.com/phuoctoan102334/giuaky
-
 ---
 
-## Phụ lục A — CI/CD dự án dictionary-app-5 bằng Jenkins (làm lại & chụp ảnh ngày 10/10/2026)
+## Phụ lục A — CI/CD dự án DevOPS-26-13 bằng Jenkins (build #3, 15/10/2026)
 
-Mục này ghi lại **toàn bộ quy trình CI/CD đã thực hiện thật** cho dự án `dictionary-app-5`
-(React 18 + Vite + Express + Postgres 16), kiểm chứng lại từ đầu bằng **build Jenkins #6 - SUCCESS**
-và chụp ảnh từng bước. Nội dung cũ của README ở trên được giữ nguyên.
+Mục này ghi lại **toàn bộ quy trình CI/CD đã thực hiện thật** cho repo môn học
+`DevOPS-26-13` — ứng dụng quản lý sinh viên gồm `backend` (Spring Boot 3.4.1 / Java 21),
+`frontend` (nginx) và `database` (SQL Server 2022), điều phối bằng `docker-compose.yml`.
+Kết quả nghiệm thu là **build Jenkins #3 — SUCCESS** (15/10/2026, 3 phút 06 giây),
+ảnh chụp từng bước nằm trong `image_toan/`.
 
 ### A.1. Tổng quan pipeline
 
-Jenkins chạy trong container trên chính laptop, deploy ngược ra laptop qua `/var/run/docker.sock`.
-Pipeline gồm 6 stage:
-
-| Stage | Việc làm |
+| Stage | Nội dung |
 |---|---|
-| Chuẩn bị | Tính tag image theo commit SHA, `docker login` GHCR, tạo builder buildx đa kiến trúc |
-| 1. BUILD | Build bản native `linux/amd64` bằng cache trên registry, nạp vào Docker local để test |
-| 2. TEST | Chạy `scripts/smoke-test.sh` (8 kiểm tra) trên image vừa build |
-| 3. PUSH | Build đa kiến trúc `linux/amd64,linux/arm64`, push tag `:SHA` + `:latest` lên GHCR |
-| 4. PULL | Xóa bản local, pull lại từ GHCR để kiểm chứng đúng image đã push |
-| 5. DEPLOY | Deploy stack `dictionary-prod` (web `:3000`, db `:5432`), giữ volume dữ liệu |
-| 6. Kiểm tra sau deploy | Đợi app phản hồi `/api/health` rồi gọi API thật xác nhận |
+| Checkout SCM | Lấy `Jenkinsfile` từ nhánh `master` của repo |
+| Chuẩn bị | Tính tag theo commit, kiểm tra Docker Compose, `docker login ghcr.io` |
+| 1. BUILD | `docker compose -p student-management-system build` → 3 image |
+| 2. TEST | Lên stack tạm → chạy `ci/smoke-test.sh` (8 kiểm tra) → hạ stack |
+| 3. PUSH | Đổi tên và push 6 tag (3 image × `:b618c60` và `:latest`) lên GHCR |
+| 4. PULL | Pull lại đúng image vừa push, đối chiếu Digest, đổi tên về tag compose cần |
+| 5. DEPLOY | `up -d --no-build` → chạy lại 8 smoke test → báo kết quả ở `post` |
 
-Ba nguyên tắc: build một lần cho mỗi kiến trúc (không build lại khi deploy); image đa kiến trúc
-(1 tag chạy được cả PC Intel/AMD lẫn Mac M-series); test trên đúng kiến trúc máy mình trước khi push.
+Mã nguồn pipeline: [`Jenkinsfile`](Jenkinsfile) ·
+kiểm thử: [`ci/smoke-test.sh`](ci/smoke-test.sh)
+
+![Repo GitHub DevOPS-26-13](image_toan/03-github-repo-devops-26-13.png)
 
 ### A.2. Chuẩn bị (làm 1 lần)
 
-1. **Docker Desktop** đã cài và khởi động (kiểm tra: `docker version` → Server `29.7.2`, arch `amd64`).
-2. **Jenkins container** chạy ở `http://localhost:8080` (thư mục `jenkins/` của dự án dictionary-app-5:
-   image Jenkins + mount `/var/run/docker.sock` để điều khiển Docker của laptop).
-3. **Repo GitHub public** `phuoctoan102334/dictionary-app-5`, nhánh `main`, đã có `Jenkinsfile`
-   (pipeline-as-code), `docker-compose.yml` + `docker-compose.prod.yml`, `scripts/smoke-test.sh`:
+1. **Jenkins container** tại `http://localhost:8090` — cố ý rời khỏi 8080 để nhường
+   cổng đó cho backend theo `docker-compose.yml`. Volume `jenkins_jenkins_home` được giữ
+   nguyên nên job và credential không mất.
+
+   ```powershell
+   docker run -d --name jenkins --restart unless-stopped --network jenkins_default `
+     --group-add 0 -p 8090:8080 -p 50000:50000 `
+     -e "JAVA_OPTS=-Djenkins.install.runSetupWizard=false" `
+     -v jenkins_jenkins_home:/var/jenkins_home `
+     -v /run/host-services/docker.proxy.sock:/var/run/docker.sock `
+     jenkins-jenkins
+   ```
+   `--group-add 0` là bắt buộc: socket Docker ở chế độ `660 root:root`, còn user
+   `jenkins` là uid 1000 nên không có quyền ghi nếu thiếu nhóm phụ này.
+
+2. **Credential** id `ghcr-credentials` (kiểu *Username with password*: user = tên GitHub,
+   password = Personal Access Token có quyền `write:packages`). Pipeline gọi bằng
+   `credentials('ghcr-credentials')`.
+
+3. **Job `devops-26-13-cicd`** — kiểu *Pipeline script from SCM*: repo
+   `https://github.com/phuoctoan102334/DevOPS-26-13.git`, nhánh `*/master`,
+   `Jenkinsfile` ở thư mục gốc, trigger `H/2 * * * *`.
+
+   ![Trang job devops-26-13-cicd, lịch sử build #1–#3](image_toan/02-jenkins-job-devops-26-13.png)
+
+4. **`Jenkinsfile` + `ci/smoke-test.sh`** đã commit và push lên `master`
+   (commit `8dda4a8` rồi `b618c60`).
 
    ![Jenkinsfile trên GitHub](image_toan/07-jenkinsfile-tren-github.png)
 
-4. **Token GitHub (classic)** có quyền `write:packages` + `read:packages` → tạo credential
-   `ghcr-credentials` (loại Username with password) trong Jenkins. Pipeline đăng nhập bằng
-   `--password-stdin` nên token không lộ trong log.
-5. **Job `dictionary-cicd`** trỏ về repo trên, nhánh `*/main`, poll SCM 2 phút/lần
-   (laptop không có IP public nên GitHub không gọi webhook vào được).
+### A.3. Chạy pipeline — build #3 — SUCCESS
 
-   ![Repo GitHub dictionary-app-5](image_toan/03-github-repo-dictionary-app-5.png)
+Trigger build qua Jenkins API (`POST /job/devops-26-13-cicd/build`, crumb kèm
+session cookie). Khi chạy xong, `post` in ra:
 
-### A.3. Chạy lại pipeline từ đầu — build #6 (kết quả thật)
+```
+DEPLOY THANH CONG - ghcr.io/phuoctoan102334/devops-26-13:b618c60 tai http://localhost:3000
+```
 
-Trigger build qua Jenkins API (`POST /job/dictionary-cicd/build`, kèm crumb + session),
-sau đó theo dõi đến khi xong. Dashboard Jenkins lúc build đang chạy:
-
-![Jenkins dashboard, build #6 đang chạy](image_toan/01-jenkins-dashboard.png)
-
-Trang chủ job `dictionary-cicd` (mô tả pipeline, lịch sử #5 SUCCESS / #4 FAILURE từ lần làm trước):
-
-![Trang job dictionary-cicd](image_toan/02-jenkins-job-dictionary-cicd.png)
-
-**Kết quả build #6: SUCCESS** — revision `982506e`, `Took 1 min 39 sec`:
-
-![Build #6 SUCCESS](image_toan/06-jenkins-build-6-thanh-cong.png)
-
-Chi tiết từng stage (trích console log build #6):
-
-- **Chuẩn bị:** `Image: ghcr.io/phuoctoan102334/dictionary-app-5:982506e`,
-  máy `linux/amd64`, sẽ push `linux/amd64,linux/arm64`; `docker login ghcr.io` thành công.
-- **1. BUILD:** `docker buildx build --platform linux/amd64 --tag ...:982506e
-  --cache-from ...:buildcache --cache-to ...:buildcache --load .`
-- **2. TEST:** 8/8 PASS —
-  `health báo đã kết nối DB`, `health đúng 10 từ`, `danh sách từ có 'computer'`,
-  `tra 'computer' ra nghĩa tiếng Việt`, `tra chữ hoa 'APPLE' vẫn ra kết quả`,
-  `từ không tồn tại trả HTTP 404`, `trang chủ trả HTTP 200`, `database có bảng words`.
-- **3. PUSH:** build `linux/amd64,linux/arm64`, push 2 tag `:982506e` + `:latest`
-  lên `ghcr.io` (package để chế độ **private** nên trang Packages public không hiện —
-  bằng chứng là digest ở stage PULL bên dưới).
-- **4. PULL:** `docker pull ghcr.io/phuoctoan102334/dictionary-app-5:982506e` →
-  `Digest: sha256:1be5aa4d354cc1c64f76a8363cd3f9667d0f968077232dc88dc49013f02e779`.
-- **5. DEPLOY:** `docker compose -p dictionary-prod -f docker-compose.yml
-  -f docker-compose.prod.yml up -d` → `dictionary-prod-web-1 Running`,
-  `dictionary-prod-db-1 Healthy` (volume dữ liệu được giữ, không `down -v`).
-- **6. Kiểm tra sau deploy:** `App sẵn sàng sau 1s`, gọi thật `/api/health` và
-  `/api/define/computer` đều trả kết quả → `THÀNH CÔNG, Ứng dụng: http://localhost:3000`.
-
-Ứng dụng sau deploy (tra từ `apple` → `quả táo`, Database đã kết nối 10 từ):
-
-![App dictionary chạy ở cổng 3000](image_toan/04-app-dictionary-chay-o-cong-3000.png)
-
-![API health connected 10 từ](image_toan/05-api-health-connected-10-tu.png)
-
-### A.4. Sự cố đã gặp và cách xử lý (lần làm đầu, build #1–#5)
-
-| Sự cố | Cách xử lý |
+| Mục | Giá trị |
 |---|---|
-| Port `:3000` bị `multica-frontend-1` chiếm, port `:8080` bị `multica-backend-1` chiếm | Được chủ máy đồng ý → stop container multica, chạy stack dict ở port thay thế lúc thử nghiệm |
-| DNS chập chờn (AdGuard `94.140.14.14`): build #1 rớt ở `docker login`, #2 rớt ở `auth.docker.io`, #3 rớt ở `registry-1.docker.io`, #4 rớt ở `imagetools inspect ghcr.io` | Không đổi được DNS (máy không có quyền admin) → chạy lại build đến khi mạng ổn; build #5 SUCCESS toàn pipeline |
-| Lần ghi tài liệu này (10/10): Docker Desktop chưa khởi động, Brave CDP chưa bật | Khởi động Docker Desktop, mở Brave profile riêng với `--remote-debugging-port=9222` (không đụng phiên Brave của người dùng) |
-| Jenkins API báo `403 No valid crumb` khi trigger build | Crumb phải đi kèm session cookie → dùng `WebRequestSession`: GET crumb rồi POST kèm header `Jenkins-Crumb` trong cùng session |
-| GHCR package 401 khi xem ẩn danh / `gh` thiếu scope `read:packages` | Package đang ở chế độ private — kiểm chứng bằng digest lúc PULL trong console log thay vì xem web |
+| Job / Build | `devops-26-13-cicd` / **#3** |
+| Thời điểm | 14:23:52, ngày 15/10/2026 (giờ +07) |
+| Thời gian chạy | **3 phút 06 giây** |
+| Trạng thái | SUCCESS (dấu tích xanh) |
+| Revision | `b618c6009aa30a5e118348487333f9311999c6be` |
+| Commit | “Smoke test: dung host.docker.internal khi chay trong Jenkins container” |
+| Image và digest | `…-backend` `d99a5eaaf076…`, `…-frontend` `62449a8c681f…`, `…-database` `b01a64981051…` |
 
-Lưu ý bảo mật: Jenkins local hiện chạy chế độ mở (Unsecured, không cần đăng nhập —
-build #6 hiển thị `Started by anonymous user`). Ổn cho lab trên laptop cá nhân;
-nếu expose Jenkins ra mạng ngoài thì phải bật authentication + authorization.
+Kết quả chi tiết:
 
-### A.5. Rollback về bản trước (thay `<sha_cũ>`)
+- **1. BUILD** — 3 image: `backend` 504MB, `database` 2.35GB, `frontend` 73.6MB.
+- **2. TEST — 8/8 PASS**: trang chủ 200 · API qua proxy 200 · API trực tiếp 200 ·
+  `GET /api/students/1` 200 · `GET /api/students/search?name=A` 200 · dữ liệu seed đã nạp ·
+  `database` container healthy · `frontend` container running.
+- **3. PUSH** — push 6 tag (3 image × `:b618c60` + `:latest`) lên GHCR.
+- **4. PULL** — Digest của 3 image khớp hoàn toàn với Digest vừa push.
+- **5. DEPLOY** — `docker compose up -d --no-build`, chạy lại 8 smoke test → 8/8 PASS.
+
+![Kết quả 8/8 smoke test trong console log của build #3](image_toan/08-jenkins-smoke-test-8-8.png)
+
+![Build #3 SUCCESS trên Jenkins](image_toan/06-jenkins-build-3-thanh-cong.png)
+
+Ứng dụng sau deploy:
+
+![Ứng dụng quản lý sinh viên tại cổng 3000](image_toan/04-app-sinh-vien-o-cong-3000.png)
+
+![API /api/students trả JSON](image_toan/05-api-students-json.png)
+
+### A.4. Sự cố đã gặp và cách xử lý (build #1–#2)
+
+| # | Lỗi | Nguyên nhân | Cách xử lý |
+|---|---|---|---|
+| 1 | `exec /opt/mssql-init/entrypoint-init.sh: no such file or directory` | `core.autocrlf=true` khiến file `.sh` trong working tree có CRLF | Thêm `*.sh`, `*.conf`, `Dockerfile`, `*.yml`, `Jenkinsfile` vào `.gitattributes` với `text eol=lf` rồi checkout lại |
+| 2 | `permission denied … unix:///var/run/docker.sock` (build #1) | Socket `660 root:root`, user `jenkins` uid 1000 không thuộc nhóm root | Tạo lại container với `--group-add 0`, kiểm tra bằng `docker version` chạy trong container |
+| 3 | Smoke test `000000` / `404` (build #2) | `localhost` bên trong container Jenkins là chính Jenkins (cũng nghe 8080) | Dùng `host.docker.internal`; `ci/smoke-test.sh` tự nhận diện môi trường (`/.dockerenv` + `getent hosts`) |
+| 4 | `403 No valid crumb` khi gọi API Jenkins | Crumb phải đi kèm session cookie | GET crumb rồi POST build trong cùng `WebRequestSession` / cùng cookie jar |
+
+Lịch sử build: **#1 FAILURE** (18s) → **#2 FAILURE** (6 phút 53 giây) → **#3 SUCCESS** (3 phút 06 giây).
+
+![Dashboard Jenkins với job devops-26-13-cicd](image_toan/01-jenkins-dashboard.png)
+
+### A.5. Rollback về bản trước
 
 ```bash
-IMAGE_TAG=ghcr.io/phuoctoan102334/dictionary-app-5:<sha_cũ> WEB_PORT=3000 DB_PORT=5432 \
-POSTGRES_USER=dictuser POSTGRES_PASSWORD=dictpass POSTGRES_DB=dictionary \
-docker compose -p dictionary-prod \
-  -f docker-compose.yml -f docker-compose.prod.yml up -d
+# Lấy sha cần quay lại
+SHA=$(git rev-parse --short=7 HEAD~1)
+git revert <commit> && git push origin master
+# hoặc chạy lại job với commit cũ:
+curl -X POST -H "Jenkins-Crumb:<crumb>" \
+  "http://localhost:8090/job/devops-26-13-cicd/build?delay=0sec"
 ```
+
+Image đã push lên GHCR luôn gắn với tag `:<sha>` nên có thể deploy lại bản cũ bằng
+`IMAGE_TAG=<sha>` mà không cần build lại.
 
 ### A.6. Danh mục ảnh (`image_toan/`)
 
-| File | Nội dung |
+| Tệp | Nội dung |
 |---|---|
-| `01-jenkins-dashboard.png` | Dashboard Jenkins, build #6 đang chạy stage Chuẩn bị |
-| `02-jenkins-job-dictionary-cicd.png` | Trang chủ job, lịch sử build #5 SUCCESS / #4 FAILURE |
-| `03-github-repo-dictionary-app-5.png` | Repo GitHub public, nhánh `main` |
-| `04-app-dictionary-chay-o-cong-3000.png` | App tra từ điển sau deploy |
-| `05-api-health-connected-10-tu.png` | API `/api/health` trả `connected`, 10 từ |
-| `06-jenkins-build-6-thanh-cong.png` | Build #6 SUCCESS, revision `982506e` |
+| `hinh-41-wsl-ubuntu.png` | WSL, phiên làm việc Ubuntu |
+| `hinh-42-ubuntu-he-thong.png` | Ngày giờ, mạng, ổ đĩa, bộ nhớ của Ubuntu |
+| `hinh-43-ssh-thanh-cong.png` | SSH từ Ubuntu vào Windows thành công |
+| `hinh-45-docker-pull-run.png` | `docker pull alpine`, chạy container `toan` |
+| `hinh-46-docker-exec-tao-file.png` | `docker exec`, tạo và đọc file `hello.txt` |
+| `01-jenkins-dashboard.png` | Dashboard Jenkins tại cổng 8090 |
+| `02-jenkins-job-devops-26-13.png` | Trang job, lịch sử build #1–#3 |
+| `03-github-repo-devops-26-13.png` | Repo GitHub public, nhánh `master` |
+| `04-app-sinh-vien-o-cong-3000.png` | Ứng dụng quản lý sinh viên sau deploy |
+| `05-api-students-json.png` | API `/api/students` trả JSON danh sách |
+| `06-jenkins-build-3-thanh-cong.png` | Build #3 SUCCESS, revision `b618c60` |
 | `07-jenkinsfile-tren-github.png` | File `Jenkinsfile` (pipeline-as-code) trên GitHub |
+| `08-jenkins-smoke-test-8-8.png` | Console log: `KET QUA: 8 PASS / 0 FAIL` |
